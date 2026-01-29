@@ -75,6 +75,7 @@ load_config() {
 check_imunify_installed() {
     if [[ ! -x "$IMUNIFY_CLI" ]]; then
         log "ERROR" "Imunify not found at $IMUNIFY_CLI"
+        log "INFO" "Please install Imunify360 or Imunify AV from https://www.imunify360.com/"
         return 1
     fi
     log "INFO" "Imunify found at $IMUNIFY_CLI"
@@ -84,22 +85,17 @@ check_imunify_installed() {
 scan_for_malware() {
     local scan_path="$1"
     
-    log "INFO" "Starting Imunify malware scan on $scan_path"
+    log "INFO" "Checking for malware in $scan_path"
     
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "INFO" "[DRY RUN] Would scan: $scan_path"
+        log "INFO" "[DRY RUN] Would check for malware in: $scan_path"
         return 0
     fi
     
-    # Run Imunify scan
-    if check_imunify_installed; then
-        if $IMUNIFY_CLI malware malicious list --json --limit 1000 > "$TEMP_DIR/malware_list.json" 2>&1; then
-            log "SUCCESS" "Malware scan completed"
-            return 0
-        else
-            log "ERROR" "Malware scan failed"
-            return 1
-        fi
+    # Check if we have scan results from the main function
+    if [[ -f "$TEMP_DIR/malware_list.json" ]]; then
+        log "INFO" "Using existing malware scan results"
+        return 0
     fi
     
     return 1
@@ -173,6 +169,7 @@ restore_wordpress_core() {
     # Check if WP-CLI is available
     if [[ ! -x "$WP_CLI" ]]; then
         log "ERROR" "WP-CLI not found at $WP_CLI, cannot restore core files"
+        log "INFO" "Install WP-CLI by running: curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && chmod +x wp-cli.phar && mv wp-cli.phar /usr/local/bin/wp"
         return 1
     fi
     
@@ -223,23 +220,29 @@ fix_wordpress_permissions() {
     log "INFO" "Setting owner to $wp_owner:$wp_group"
     
     # Fix ownership
-    chown -R "$wp_owner:$wp_group" "$wp_path" 2>&1 | tee -a "$LOG_FILE"
+    if ! chown -R "$wp_owner:$wp_group" "$wp_path" 2>&1 | grep -i error | tee -a "$LOG_FILE"; then
+        log "INFO" "Ownership updated"
+    fi
     
     # Fix directory permissions (755)
-    find "$wp_path" -type d -exec chmod 755 {} \; 2>&1 | tee -a "$LOG_FILE"
+    if ! find "$wp_path" -type d -exec chmod 755 {} + 2>&1 | grep -i error | tee -a "$LOG_FILE"; then
+        log "INFO" "Directory permissions updated"
+    fi
     
     # Fix file permissions (644)
-    find "$wp_path" -type f -exec chmod 644 {} \; 2>&1 | tee -a "$LOG_FILE"
+    if ! find "$wp_path" -type f -exec chmod 644 {} + 2>&1 | grep -i error | tee -a "$LOG_FILE"; then
+        log "INFO" "File permissions updated"
+    fi
     
     # Special permissions for wp-config.php (600)
     if [[ -f "$wp_path/wp-config.php" ]]; then
-        chmod 600 "$wp_path/wp-config.php" 2>&1 | tee -a "$LOG_FILE"
+        chmod 600 "$wp_path/wp-config.php" 2>&1 | grep -i error | tee -a "$LOG_FILE" || true
     fi
     
     # Writable directories
     for dir in wp-content/uploads wp-content/cache wp-content/backup; do
         if [[ -d "$wp_path/$dir" ]]; then
-            chmod 755 "$wp_path/$dir" 2>&1 | tee -a "$LOG_FILE"
+            chmod 755 "$wp_path/$dir" 2>&1 | grep -i error | tee -a "$LOG_FILE" || true
         fi
     done
     
@@ -342,12 +345,21 @@ main() {
     # Create temp directory
     mkdir -p "$TEMP_DIR"
     
+    # Set up cleanup trap
+    trap cleanup EXIT INT TERM
+    
     # Load configuration
     load_config
     
     # Check prerequisites
     if ! check_imunify_installed; then
         log "WARNING" "Imunify not available, malware scanning will be skipped"
+    else
+        # Run malware scan once for the entire system
+        log "INFO" "Running system-wide malware scan..."
+        if [[ "$DRY_RUN" != "true" ]]; then
+            $IMUNIFY_CLI malware malicious list --json --limit 1000 > "$TEMP_DIR/malware_list.json" 2>&1 || true
+        fi
     fi
     
     # Detect WordPress installations

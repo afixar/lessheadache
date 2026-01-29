@@ -65,21 +65,45 @@ install_dependencies() {
     # Check for WP-CLI
     if [[ ! -f /usr/local/bin/wp ]]; then
         log_info "Installing WP-CLI..."
-        curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-        chmod +x wp-cli.phar
-        mv wp-cli.phar /usr/local/bin/wp
-        log_info "WP-CLI installed successfully"
+        
+        # Download WP-CLI
+        curl -sS -o wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        
+        # Download checksum
+        curl -sS -o wp-cli.phar.sha512 https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar.sha512
+        
+        # Verify checksum
+        if sha512sum -c wp-cli.phar.sha512 2>/dev/null; then
+            log_info "WP-CLI checksum verified"
+            chmod +x wp-cli.phar
+            mv wp-cli.phar /usr/local/bin/wp
+            rm -f wp-cli.phar.sha512
+            log_info "WP-CLI installed successfully"
+        else
+            log_error "WP-CLI checksum verification failed"
+            rm -f wp-cli.phar wp-cli.phar.sha512
+            return 1
+        fi
     else
         log_info "WP-CLI already installed"
     fi
     
     # Check for Imunify
-    if [[ ! -x /usr/bin/imunify-antivirus ]] && [[ ! -x /usr/bin/imunify360 ]]; then
+    local imunify_path=""
+    if [[ -x /usr/bin/imunify-antivirus ]]; then
+        imunify_path="/usr/bin/imunify-antivirus"
+        log_info "Imunify AV found"
+    elif [[ -x /usr/bin/imunify360 ]]; then
+        imunify_path="/usr/bin/imunify360"
+        log_info "Imunify360 found"
+    else
         log_warning "Imunify not found. Please install Imunify360 or Imunify AV separately."
         log_warning "Visit: https://www.imunify360.com/"
-    else
-        log_info "Imunify found"
+        imunify_path="/usr/bin/imunify-antivirus"  # Use default for config
     fi
+    
+    # Store the detected Imunify path for config update
+    DETECTED_IMUNIFY_CLI="$imunify_path"
 }
 
 install_lessheadache() {
@@ -98,6 +122,12 @@ install_lessheadache() {
     if [[ ! -f "$CONFIG_DIR/config.conf" ]]; then
         if [[ -f "$SCRIPT_DIR/config.conf.example" ]]; then
             cp "$SCRIPT_DIR/config.conf.example" "$CONFIG_DIR/config.conf"
+            
+            # Update Imunify path if detected
+            if [[ -n "$DETECTED_IMUNIFY_CLI" ]]; then
+                sed -i "s|IMUNIFY_CLI=.*|IMUNIFY_CLI=\"$DETECTED_IMUNIFY_CLI\"|" "$CONFIG_DIR/config.conf"
+            fi
+            
             log_info "Created configuration file at $CONFIG_DIR/config.conf"
             log_warning "Please edit $CONFIG_DIR/config.conf to set your email and other settings"
         fi
@@ -129,6 +159,24 @@ EOF
     chmod 644 "$cron_file"
     log_info "Cron job installed at $cron_file"
     log_info "lessheadache will run daily at 2:00 AM"
+    
+    # Set up log rotation
+    local logrotate_file="/etc/logrotate.d/lessheadache"
+    
+    cat > "$logrotate_file" << 'EOF'
+/var/log/lessheadache.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+EOF
+    
+    chmod 644 "$logrotate_file"
+    log_info "Log rotation configured at $logrotate_file"
 }
 
 show_next_steps() {

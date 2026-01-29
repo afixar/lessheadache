@@ -24,13 +24,3 @@ DRY_RUN="false"
 # Logging
 # Path to log file
 LOG_FILE="/var/log/lessheadache.log"
-
-# Scanning Configuration
-# Maximum depth for WordPress installation detection
-MAX_SCAN_DEPTH=3
-
-# Automatically fix permissions (true/false)
-AUTO_FIX_PERMISSIONS="true"
-
-# Automatically restore WordPress core files (true/false)
-AUTO_RESTORE_CORE="true"
