@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLIENT="$1"
+BASE="/opt/wordpress-core"
+CURRENT="$BASE/current"
+TARGET="__HOME_BASE__/$CLIENT/public_html"
+
+if [ -z "$CLIENT" ]; then
+  echo "Uso: wp-core-refresh USUARIO"
+  exit 1
+fi
+
+mkdir -p "$CURRENT"
+
+if [ ! -d "$CURRENT/wp-admin" ] || [ ! -d "$CURRENT/wp-includes" ]; then
+  mkdir -p "$BASE"
+  curl -L -o "$BASE/latest.tar.gz" https://br.wordpress.org/latest-pt_BR.tar.gz
+  tar -xzf "$BASE/latest.tar.gz" -C "$BASE"
+  mv "$BASE/wordpress/wp-admin" "$CURRENT/"
+  mv "$BASE/wordpress/wp-includes" "$CURRENT/"
+  rm -rf "$BASE/wordpress" "$BASE/latest.tar.gz"
+fi
+
+rsync -av --delete "$CURRENT/wp-admin/" "$TARGET/wp-admin/"
+rsync -av --delete "$CURRENT/wp-includes/" "$TARGET/wp-includes/"
+
+chown -R "$CLIENT:$CLIENT" "$TARGET/wp-admin" "$TARGET/wp-includes"
