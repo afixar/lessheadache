@@ -9,7 +9,6 @@
 #############################################################
 
 VERSION="1.0.0"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${CONFIG_FILE:-/etc/lessheadache/config.conf}"
 LOG_FILE="/var/log/lessheadache.log"
 TEMP_DIR="/tmp/lessheadache_$$"
@@ -35,7 +34,8 @@ log() {
     local level="$1"
     shift
     local message="$*"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
     
     case "$level" in
@@ -61,6 +61,7 @@ log() {
 load_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
         log "INFO" "Loading configuration from $CONFIG_FILE"
+        # shellcheck source=/dev/null
         source "$CONFIG_FILE"
     else
         log "WARNING" "Configuration file not found at $CONFIG_FILE, using defaults"
@@ -92,8 +93,7 @@ scan_for_malware() {
     
     # Run Imunify scan
     if check_imunify_installed; then
-        $IMUNIFY_CLI malware malicious list --json --limit 1000 > "$TEMP_DIR/malware_list.json" 2>&1
-        if [[ $? -eq 0 ]]; then
+        if $IMUNIFY_CLI malware malicious list --json --limit 1000 > "$TEMP_DIR/malware_list.json" 2>&1; then
             log "SUCCESS" "Malware scan completed"
             return 0
         else
@@ -160,7 +160,8 @@ get_wordpress_version() {
 
 restore_wordpress_core() {
     local wp_path="$1"
-    local wp_version=$(get_wordpress_version "$wp_path")
+    local wp_version
+    wp_version=$(get_wordpress_version "$wp_path")
     
     log "INFO" "Restoring WordPress core files for $wp_path (version: $wp_version)"
     
@@ -178,7 +179,8 @@ restore_wordpress_core() {
     # Restore core files using WP-CLI
     cd "$wp_path" || return 1
     
-    local wp_user=$(stat -c '%U' "$wp_path")
+    local wp_user
+    wp_user=$(stat -c '%U' "$wp_path")
     
     if sudo -u "$wp_user" "$WP_CLI" core verify-checksums --path="$wp_path" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "WordPress core files verified for $wp_path"
@@ -213,8 +215,10 @@ fix_wordpress_permissions() {
     fi
     
     # Get the owner of the WordPress installation
-    local wp_owner=$(stat -c '%U' "$wp_path")
-    local wp_group=$(stat -c '%G' "$wp_path")
+    local wp_owner
+    local wp_group
+    wp_owner=$(stat -c '%U' "$wp_path")
+    wp_group=$(stat -c '%G' "$wp_path")
     
     log "INFO" "Setting owner to $wp_owner:$wp_group"
     
@@ -264,9 +268,7 @@ send_email_notification() {
     fi
     
     # Send email using mail command
-    echo "$body" | mail -s "$subject" "$NOTIFICATION_EMAIL" 2>&1 | tee -a "$LOG_FILE"
-    
-    if [[ $? -eq 0 ]]; then
+    if echo "$body" | mail -s "$subject" "$NOTIFICATION_EMAIL" 2>&1 | tee -a "$LOG_FILE"; then
         log "SUCCESS" "Email notification sent"
         return 0
     else
@@ -291,7 +293,8 @@ process_wordpress_installation() {
     
     # Scan for malware
     if scan_for_malware "$wp_path"; then
-        local malware_files=$(get_malware_files "$wp_path")
+        local malware_files
+        malware_files=$(get_malware_files "$wp_path")
         if [[ -n "$malware_files" ]]; then
             issues_found=$((issues_found + 1))
             report+="⚠ Malware detected:\n$malware_files\n\n"
@@ -331,7 +334,8 @@ process_wordpress_installation() {
 #############################################################
 
 main() {
-    local start_time=$(date '+%Y-%m-%d %H:%M:%S')
+    local start_time
+    start_time=$(date '+%Y-%m-%d %H:%M:%S')
     
     log "INFO" "lessheadache v$VERSION starting..."
     
@@ -347,15 +351,15 @@ main() {
     fi
     
     # Detect WordPress installations
-    local wp_installations=$(detect_wordpress_installations)
+    mapfile -t wp_installations < <(detect_wordpress_installations)
     
-    if [[ -z "$wp_installations" ]]; then
+    if [[ ${#wp_installations[@]} -eq 0 ]]; then
         log "WARNING" "No WordPress installations found"
         cleanup
         exit 0
     fi
     
-    log "INFO" "Found $(echo "$wp_installations" | wc -l) WordPress installation(s)"
+    log "INFO" "Found ${#wp_installations[@]} WordPress installation(s)"
     
     # Process each installation
     local full_report=""
@@ -363,10 +367,11 @@ main() {
     full_report+="Generated: $start_time\n"
     full_report+="=====================================\n\n"
     
-    while IFS= read -r wp_path; do
-        local install_report=$(process_wordpress_installation "$wp_path")
+    for wp_path in "${wp_installations[@]}"; do
+        local install_report
+        install_report=$(process_wordpress_installation "$wp_path")
         full_report+="$install_report"
-    done <<< "$wp_installations"
+    done
     
     # Send email notification
     if [[ -n "$NOTIFICATION_EMAIL" ]]; then
@@ -376,7 +381,8 @@ main() {
     # Cleanup
     cleanup
     
-    local end_time=$(date '+%Y-%m-%d %H:%M:%S')
+    local end_time
+    end_time=$(date '+%Y-%m-%d %H:%M:%S')
     log "SUCCESS" "lessheadache completed. Started: $start_time, Ended: $end_time"
 }
 
