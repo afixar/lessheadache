@@ -1,0 +1,36 @@
+###############################################################################
+# lessheadache Configuration File
+###############################################################################
+
+# Imunify Configuration
+# Path to Imunify CLI executable
+IMUNIFY_CLI="/usr/bin/imunify-antivirus"
+
+# WordPress CLI Configuration
+# Path to WP-CLI executable
+WP_CLI="/usr/local/bin/wp"
+
+# Email Notifications
+# Enable or disable email notifications (true/false)
+EMAIL_NOTIFICATIONS="true"
+
+# Email address to receive notifications
+NOTIFICATION_EMAIL="admin@example.com"
+
+# Dry Run Mode
+# Set to "true" to perform a dry run without making actual changes
+DRY_RUN="false"
+
+# Logging
+# Path to log file
+LOG_FILE="/var/log/lessheadache.log"
+
+# Scanning Configuration
+# Maximum depth for WordPress installation detection
+MAX_SCAN_DEPTH=3
+
+# Automatically fix permissions (true/false)
+AUTO_FIX_PERMISSIONS="true"
+
+# Automatically restore WordPress core files (true/false)
+AUTO_RESTORE_CORE="true"

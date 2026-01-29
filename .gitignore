@@ -1,0 +1,23 @@
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+*~
+.DS_Store
+
+# Test files
+test_*
+
+# Configuration with sensitive data
+config.conf
+
+# Backup files
+*.bak
+*.backup
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
